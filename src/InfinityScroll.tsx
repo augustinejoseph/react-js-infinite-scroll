@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 const API_URL = "https://randomuser.me/api/";
 
@@ -46,45 +46,52 @@ interface User {
 }
 
 const InfiniteScroll: React.FC = () => {
+  const page = 1;
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [page, setPage] = useState<number>(1);
+  const pageRef = useRef<number>(1);
+  const loadingRef = useRef<boolean>(false);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchUsers = async (pageNumber: number) => {
-    if (loading) return;
+    if (loadingRef.current) return;
 
+    loadingRef.current = true;
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}?page=${pageNumber}&results=5`);
       const data = await response.json();
       setUsers((prevUsers) => [...prevUsers, ...data.results]);
+      pageRef.current += 1;
     } catch (error) {
       console.error("Error fetching users:", error);
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   };
 
-  const handleScroll = useCallback(() => {
-    const scrollPosition = window.scrollY + window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight;
-
-    if (scrollPosition / documentHeight > 0.9 && !loading) {
-      setPage((prevPage) => prevPage + 1);
-    }
-  }, [loading]);
-
+  // Initialize first fetch on component mount
   useEffect(() => {
     fetchUsers(page);
-  }, [fetchUsers, page]);
+  }, []);
 
   useEffect(() => {
-    window.addEventListener("scroll", handleScroll);
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
+    const debouncedScroll = () => {
+      if (
+        window.scrollY + window.innerHeight >=
+          document.documentElement.scrollHeight * 0.8 &&
+        !loadingRef.current
+      ) {
+        // Fetch next page only if the scroll is at 80% of the page
+        fetchUsers(pageRef.current);
+      }
     };
-  }, [handleScroll]);
+
+    window.addEventListener("scroll", debouncedScroll);
+    return () => {
+      window.removeEventListener("scroll", debouncedScroll);
+    };
+  }, []);
 
   return (
     <div className="container">
